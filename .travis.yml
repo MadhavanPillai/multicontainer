@@ -1,36 +1,26 @@
 sudo: required
-language: generic
-
 services:
   - docker
-
+env:
+ global:
+  - SHA=$(git rev-parse HEAD)
+  - CLOUDSDK_CORE_DISABLE_PROMPTS=1
 before_install:
-  - docker build -t stephengrider/react-test -f ./client/Dockerfile.dev ./client
+  - openssl aes-256-cbc -K $encrypted_248d61edfafe_key -iv $encrypted_248d61edfafe_iv -in service_account.json.enc -out service_account.json -d
+  - curl https://sdk.cloud.google.com | bash > /dev/null;
+  - source $HOME/google-cloud-sdk/path.bash.inc
+  - gcloud components update kubectl
+  - gcloud auth activate-service-account --key-file service-account.json
+  - glcoud config set project microservices01-292400
+  - glcoud config set compute/zone asia-east1-a
+  - gcloud container clusters get-credentials multicluster
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+  - docker build -t rsmadhavan/react-test -f ./client/Dockerfile.dev
 
 script:
-  - docker run stephengrider/react-test npm test -- --coverage
-
-after_success:
-  - docker build -t stephengrider/multi-client ./client
-  - docker build -t stephengrider/multi-nginx ./nginx
-  - docker build -t stephengrider/multi-server ./server
-  - docker build -t stephengrider/multi-worker ./worker
-  # Log in to the docker CLI
-  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_ID" --password-stdin
-  # Take those images and push them to docker hub
-  - docker push stephengrider/multi-client
-  - docker push stephengrider/multi-nginx
-  - docker push stephengrider/multi-server
-  - docker push stephengrider/multi-worker
-
+  - docker run rsmadhavan/react-test npm -- --coverage
 deploy:
-  provider: elasticbeanstalk
-  region: us-west-1
-  app: multi-docker
-  env: MultiDocker-env
-  bucket_name: elasticbeanstalk-us-west-1-306476627547
-  bucket_path: docker-multi
+  provider: script
+  script: bash ./deploy.sh
   on:
     branch: master
-  access_key_id: $AWS_ACCESS_KEY
-  secret_access_key: $AWS_SECRET_KEY
